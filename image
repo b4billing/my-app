@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo uploader for GitHub</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --text: #1b2430;
+    --muted: #5d6b7c;
+    --line: #d5dce5;
+    --accent: #1f6feb;
+    --accent-text: #ffffff;
+    --ok: #1a7f37;
+    --err: #c62828;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151c;
+      --surface: #19212b;
+      --text: #e6ebf1;
+      --muted: #9aa8b8;
+      --line: #2c3745;
+      --accent: #4c8dff;
+      --accent-text: #08111f;
+      --ok: #4cc26b;
+      --err: #ff7b72;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 18px 60px; }
+  h1 { font-size: 1.6rem; margin: 0 0 6px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  fieldset {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 18px;
+    margin: 0 0 18px;
+  }
+  legend { font-weight: 600; padding: 0 6px; }
+  label { display: block; font-size: .9rem; margin: 12px 0 4px; }
+  label:first-of-type { margin-top: 0; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+  }
+  input:focus-visible, button:focus-visible, .drop:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+  small { color: var(--muted); display: block; margin-top: 4px; }
+  .drop {
+    border: 2px dashed var(--line);
+    border-radius: 8px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    background: var(--surface);
+    margin-bottom: 18px;
+  }
+  .drop.over { border-color: var(--accent); }
+  .drop strong { display: block; margin-bottom: 4px; }
+  .drop span { color: var(--muted); font-size: .9rem; }
+  #file { display: none; }
+  ul#list { list-style: none; margin: 0 0 18px; padding: 0; }
+  ul#list li {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+  }
+  ul#list img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex: none; }
+  .name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .92rem; }
+  .status { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); white-space: normal; text-align: right; }
+  button {
+    font: inherit; font-weight: 600;
+    background: var(--accent); color: var(--accent-text);
+    border: 0; border-radius: 6px;
+    padding: 10px 18px; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); margin-left: 8px; }
+  #summary { margin-top: 16px; }
+  #summary a { color: var(--accent); }
+  .note { font-size: .85rem; color: var(--muted); margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Upload photos to GitHub</h1>
+  <p class="lead">Pick your photos and this page saves them into one of your repositories.</p>
+
+  <fieldset>
+    <legend>Repository</legend>
+    <div class="row">
+      <div>
+        <label for="owner">GitHub username</label>
+        <input id="owner" type="text" autocomplete="off" placeholder="your-username">
+      </div>
+      <div>
+        <label for="repo">Repository name</label>
+        <input id="repo" type="text" autocomplete="off" placeholder="my-photos">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="branch">Branch</label>
+        <input id="branch" type="text" autocomplete="off" value="main">
+      </div>
+      <div>
+        <label for="folder">Folder in the repository</label>
+        <input id="folder" type="text" autocomplete="off" value="photos">
+      </div>
+    </div>
+    <label for="token">Personal access token</label>
+    <input id="token" type="password" autocomplete="off" placeholder="github_pat_...">
+    <small>Create a fine-grained token limited to this one repository with "Contents: Read and write". It stays in this browser tab and is never saved.</small>
+  </fieldset>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose photos">
+    <strong>Choose photos or drop them here</strong>
+    <span>JPG, PNG, GIF, WebP. Up to 25 MB each.</span>
+  </div>
+  <input id="file" type="file" accept="image/*" multiple>
+
+  <ul id="list"></ul>
+
+  <div>
+    <button id="go" disabled>Upload to GitHub</button>
+    <button id="clear" class="ghost" type="button">Clear list</button>
+  </div>
+  <div id="summary" role="status" aria-live="polite"></div>
+
+  <p class="note">Keep this page private. Open it from your own computer rather than a public site, because anyone who has your token can change your repository.</p>
+</main>
+
+<script>
+(function () {
+  var MAX = 25 * 1024 * 1024;
+  var files = [];
+  var $ = function (id) { return document.getElementById(id); };
+  var drop = $('drop'), input = $('file'), list = $('list'), go = $('go'), summary = $('summary');
+
+  drop.addEventListener('click', function () { input.click(); });
+  drop.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+  });
+  ['dragenter', 'dragover'].forEach(function (t) {
+    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (t) {
+    drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) { addFiles(e.dataTransfer.files); });
+  input.addEventListener('change', function () { addFiles(input.files); input.value = ''; });
+  $('clear').addEventListener('click', function () { files = []; render(); summary.textContent = ''; });
+
+  function addFiles(fl) {
+    Array.prototype.forEach.call(fl, function (f) {
+      if (!f.type.indexOf('image/') === 0 && !/\.(jpe?g|png|gif|webp|svg)$/i.test(f.name)) return;
+      files.push({ file: f, state: f.size > MAX ? 'err' : 'ready', msg: f.size > MAX ? 'Larger than 25 MB' : '' });
+    });
+    render();
+  }
+
+  function render() {
+    list.innerHTML = '';
+    files.forEach(function (item) {
+      var li = document.createElement('li');
+      var img = document.createElement('img');
+      img.alt = '';
+      img.src = URL.createObjectURL(item.file);
+      var name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = item.file.name + ' (' + (item.file.size / 1048576).toFixed(2) + ' MB)';
+      var st = document.createElement('div');
+      st.className = 'status' + (item.state === 'done' ? ' ok' : item.state === 'err' ? ' err' : '');
+      st.textContent = item.state === 'done' ? 'Uploaded' :
+                       item.state === 'err' ? item.msg :
+                       item.state === 'busy' ? 'Uploading…' : 'Ready';
+      li.append(img, name, st);
+      list.appendChild(li);
+    });
+    go.disabled = !files.some(function (i) { return i.state === 'ready'; });
+  }
+
+  function toBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result).split(',')[1]); };
+      r.onerror = function () { reject(new Error('Could not read file')); };
+      r.readAsDataURL(file);
+    });
+  }
+
+  function safeName(n) {
+    return n.replace(/[^\w.\-]+/g, '_');
+  }
+
+  async function uploadOne(item, cfg) {
+    var folder = cfg.folder.replace(/^\/+|\/+$/g, '');
+    var path = (folder ? folder + '/' : '') + safeName(item.file.name);
+    var base = 'https://api.github.com/repos/' + encodeURIComponent(cfg.owner) + '/' + encodeURIComponent(cfg.repo) + '/contents/' + path.split('/').map(encodeURIComponent).join('/');
+    var headers = {
+      'Authorization': 'Bearer ' + cfg.token,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+
+    // If a file with the same name exists, GitHub needs its sha to overwrite it.
+    var sha;
+    var head = await fetch(base + '?ref=' + encodeURIComponent(cfg.branch), { headers: headers });
+    if (head.ok) { sha = (await head.json()).sha; }
+    else if (head.status === 401) { throw new Error('Token rejected'); }
+
+    var body = {
+      message: 'Add ' + path,
+      content: await toBase64(item.file),
+      branch: cfg.branch
+    };
+    if (sha) body.sha = sha;
+
+    var res = await fetch(base, {
+      method: 'PUT',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      var detail = '';
+      try { detail = (await res.json()).message; } catch (e) {}
+      if (res.status === 404) detail = 'Repository or branch not found, or token lacks access';
+      if (res.status === 403) detail = detail || 'Token lacks write permission';
+      throw new Error(detail || ('Error ' + res.status));
+    }
+    return path;
+  }
+
+  go.addEventListener('click', async function () {
+    var cfg = {
+      owner: $('owner').value.trim(),
+      repo: $('repo').value.trim(),
+      branch: $('branch').value.trim() || 'main',
+      folder: $('folder').value.trim(),
+      token: $('token').value.trim()
+    };
+    if (!cfg.owner || !cfg.repo || !cfg.token) {
+      summary.textContent = 'Enter your username, repository name and token first.';
+      return;
+    }
+    go.disabled = true;
+    summary.textContent = '';
+    var ok = 0, fail = 0;
+    for (var i = 0; i < files.length; i++) {
+      var item = files[i];
+      if (item.state !== 'ready') continue;
+      item.state = 'busy'; render();
+      try {
+        await uploadOne(item, cfg);
+        item.state = 'done'; ok++;
+      } catch (e) {
+        item.state = 'err'; item.msg = e.message; fail++;
+      }
+      render();
+    }
+    var link = 'https://github.com/' + encodeURIComponent(cfg.owner) + '/' + encodeURIComponent(cfg.repo) + '/tree/' + encodeURIComponent(cfg.branch) + (cfg.folder ? '/' + cfg.folder.replace(/^\/+|\/+$/g, '') : '');
+    summary.innerHTML = '';
+    summary.append(ok + ' uploaded' + (fail ? ', ' + fail + ' failed. ' : '. '));
+    if (ok) {
+      var a = document.createElement('a');
+      a.href = link; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = 'View on GitHub';
+      summary.appendChild(a);
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
