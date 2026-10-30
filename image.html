@@ -137,7 +137,11 @@
     </div>
     <label for="token">Personal access token</label>
     <input id="token" type="password" autocomplete="off" placeholder="github_pat_...">
-    <small>Create a fine-grained token limited to this one repository with "Contents: Read and write". It stays in this browser tab and is never saved.</small>
+    <small>Create a fine-grained token limited to this one repository with "Contents: Read and write".</small>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px">
+      <input id="remember" type="checkbox"> Remember my token on this device
+    </label>
+    <small>Username, repository, branch and folder are always remembered. Only tick the box on your own private computer.</small>
   </fieldset>
 
   <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose photos">
@@ -163,6 +167,29 @@
   var files = [];
   var $ = function (id) { return document.getElementById(id); };
   var drop = $('drop'), input = $('file'), list = $('list'), go = $('go'), summary = $('summary');
+
+  // Remember settings between visits (token only if the box is ticked)
+  var KEY = 'ghPhotoUploader';
+  var fields = ['owner', 'repo', 'branch', 'folder'];
+  function loadSettings() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || '{}');
+      fields.forEach(function (f) { if (s[f]) $(f).value = s[f]; });
+      if (s.token) { $('token').value = s.token; $('remember').checked = true; }
+    } catch (e) {}
+  }
+  function saveSettings() {
+    try {
+      var s = {};
+      fields.forEach(function (f) { s[f] = $(f).value.trim(); });
+      if ($('remember').checked) s.token = $('token').value.trim();
+      localStorage.setItem(KEY, JSON.stringify(s));
+    } catch (e) {}
+  }
+  loadSettings();
+  fields.concat(['token', 'remember']).forEach(function (f) {
+    $(f).addEventListener('change', saveSettings);
+  });
 
   drop.addEventListener('click', function () { input.click(); });
   drop.addEventListener('keydown', function (e) {
@@ -270,6 +297,7 @@
       summary.textContent = 'Enter your username, repository name and token first.';
       return;
     }
+    saveSettings();
     go.disabled = true;
     summary.textContent = '';
     var ok = 0, fail = 0;
