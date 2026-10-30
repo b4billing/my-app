@@ -105,6 +105,12 @@
   button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); margin-left: 8px; }
   #summary { margin-top: 16px; }
   #summary a { color: var(--accent); }
+  #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+  .card img { width: 100%; height: 110px; object-fit: cover; display: block; }
+  .card .cap { padding: 8px; font-size: .8rem; overflow-wrap: anywhere; }
+  .card .btns { display: flex; gap: 6px; padding: 0 8px 8px; flex-wrap: wrap; }
+  .card button { padding: 5px 8px; font-size: .75rem; }
   .note { font-size: .85rem; color: var(--muted); margin-top: 28px; }
 </style>
 </head>
@@ -157,6 +163,13 @@
     <button id="clear" class="ghost" type="button">Clear list</button>
   </div>
   <div id="summary" role="status" aria-live="polite"></div>
+
+  <fieldset id="gallery-box" style="margin-top:28px">
+    <legend>Uploaded photos</legend>
+    <button id="load" type="button">Load list from GitHub</button>
+    <div id="gal-msg" role="status" aria-live="polite" style="margin-top:10px;color:var(--muted);font-size:.9rem"></div>
+    <div id="gallery"></div>
+  </fieldset>
 
   <p class="note">Keep this page private. Open it from your own computer rather than a public site, because anyone who has your token can change your repository.</p>
 </main>
@@ -323,6 +336,53 @@
       summary.appendChild(a);
     }
   });
+
+  // List photos already stored in the repository folder
+  var gal = $('gallery'), galMsg = $('gal-msg');
+  function copyText(text, btn) {
+    var done = function () { var o = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = o; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { window.prompt('Copy this link:', text); });
+    } else { window.prompt('Copy this link:', text); }
+  }
+  async function loadGallery() {
+    var owner = $('owner').value.trim(), repo = $('repo').value.trim();
+    var branch = $('branch').value.trim() || 'main';
+    var folder = $('folder').value.trim().replace(/^\/+|\/+$/g, '');
+    var token = $('token').value.trim();
+    if (!owner || !repo) { galMsg.textContent = 'Enter your username and repository name first.'; return; }
+    galMsg.textContent = 'Loading…'; gal.innerHTML = '';
+    var url = 'https://api.github.com/repos/' + encodeURIComponent(owner) + '/' + encodeURIComponent(repo) + '/contents/' +
+              (folder ? folder.split('/').map(encodeURIComponent).join('/') : '') + '?ref=' + encodeURIComponent(branch);
+    var headers = { 'Accept': 'application/vnd.github+json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    try {
+      var res = await fetch(url, { headers: headers, cache: 'no-store' });
+      if (res.status === 404) { galMsg.textContent = 'Folder not found. Nothing has been uploaded there yet.'; return; }
+      if (!res.ok) { galMsg.textContent = 'Could not load the list (error ' + res.status + ').'; return; }
+      var items = (await res.json()).filter(function (i) { return i.type === 'file' && /\.(jpe?g|png|gif|webp|svg|bmp|avif)$/i.test(i.name); });
+      if (!items.length) { galMsg.textContent = 'No photos found in this folder.'; return; }
+      galMsg.textContent = items.length + ' photo' + (items.length === 1 ? '' : 's') + ' found.';
+      items.forEach(function (it) {
+        var siteUrl = 'https://' + owner + '.github.io/' + repo + '/' + it.path.split('/').map(encodeURIComponent).join('/');
+        var card = document.createElement('div'); card.className = 'card';
+        var img = document.createElement('img'); img.alt = it.name; img.loading = 'lazy';
+        img.src = it.download_url || siteUrl;
+        var cap = document.createElement('div'); cap.className = 'cap'; cap.textContent = it.name;
+        var btns = document.createElement('div'); btns.className = 'btns';
+        var b1 = document.createElement('button'); b1.type = 'button'; b1.textContent = 'Copy site link';
+        b1.addEventListener('click', function () { copyText(siteUrl, b1); });
+        var b2 = document.createElement('button'); b2.type = 'button'; b2.className = 'ghost'; b2.style.marginLeft = '0'; b2.textContent = 'Copy raw link';
+        b2.addEventListener('click', function () { copyText(it.download_url, b2); });
+        btns.append(b1, b2);
+        card.append(img, cap, btns);
+        gal.appendChild(card);
+      });
+    } catch (e) {
+      galMsg.textContent = 'Could not reach GitHub. Check your internet connection.';
+    }
+  }
+  $('load').addEventListener('click', loadGallery);
 
   render();
 })();
